@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 
+import static com.baomidou.mybatisplus.core.toolkit.Wrappers.update;
+
 /**
  * <p>
  * 前端控制器
@@ -34,7 +36,9 @@ public class ShopController {
      */
     @GetMapping("/{id}")
     public Result queryShopById(@PathVariable("id") Long id) {
-        return Result.ok(shopService.getById(id));
+
+        Result result = shopService.queryById(id);
+        return Result.ok(result);
     }
 
     /**
@@ -60,8 +64,9 @@ public class ShopController {
     @PutMapping
     public Result updateShop(@RequestBody Shop shop) {
         // 写入数据库
-        shopService.updateById(shop);
-        return Result.ok();
+      // Result result = ;
+        //shopService.updateById(shop);
+        return  shopService.update(shop);
     }
 
     /**
