@@ -1,5 +1,6 @@
 package com.hmdp.service.impl;
 
+import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.hmdp.dto.Result;
@@ -32,6 +33,24 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 
     @Override
     public Result queryById(Long id) {
+        //缓存穿透
+        //Shop shop = queryWithPassthrough(id);
+
+        //缓存击穿
+        Shop shop = queryWithMutex(id);
+        if (shop ==null){
+            Result.fail("店铺不存在！");
+        }
+
+        //7返回结果
+        return Result.ok(shop);
+    }
+    /**
+     * 互斥锁解决缓存击穿
+     * @param id  商户id
+     * @return shop
+     */
+    public Shop queryWithMutex(Long id){
         //1,从redis中获取商户信息
         String key = RedisConstants.CACHE_SHOP_KEY + id;
         stringRedisTemplate.opsForValue().get("cache:shop:" + id);
@@ -40,12 +59,74 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         if (StrUtil.isNotBlank(shopJson)) {
             //3存在直接返回
             Shop shop = JSONUtil.toBean(shopJson, Shop.class);
-            return Result.ok(shop);
+            return shop;
         }
         //命中的是否是空值
         if (shopJson != null) {
             //返回错误信息
-            return Result.fail("店铺不存在！");
+            return null;
+
+        }
+        //4实现缓存重建
+        //4.1获取互斥锁
+        String lockKey = RedisConstants.LOCK_SHOP_KEY +id;
+        Shop shop = null;
+        try {
+            boolean isLock = trLock(lockKey);
+            //4.2判断锁获取是否成功
+            if (!isLock){
+                //4.3失败，则休眠并重试
+                Thread.sleep(20);
+                //递归
+                return queryWithMutex(id);
+            }
+            //4不存在，根据id查询数据库
+            shop = getById(id);
+            log.info("查询数据库商户==============={} " + shop);
+
+            //模拟重建延时
+           Thread.sleep(200);
+
+            //5不存在，返回错误
+            if (shop == null) {
+                //将空值存入redis
+                //返回错误信息
+                stringRedisTemplate.opsForValue().set(key, "", RedisConstants.CACHE_NULL_TTL, TimeUnit.MINUTES);
+                return null;
+            }
+            //6存在写入redis
+            stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(shop), RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        } finally {
+            //释放锁
+            unLock(lockKey);
+        }
+
+        //8返回结果
+        return shop;
+    }
+
+    /**
+     * 穿透解决方案
+     * @param id
+     * @return shop
+     */
+    public Shop queryWithPassthrough(Long id){
+        //1,从redis中获取商户信息
+        String key = RedisConstants.CACHE_SHOP_KEY + id;
+        stringRedisTemplate.opsForValue().get("cache:shop:" + id);
+        String shopJson = stringRedisTemplate.opsForValue().get(key);
+        //2判断是否存在
+        if (StrUtil.isNotBlank(shopJson)) {
+            //3存在直接返回
+            Shop shop = JSONUtil.toBean(shopJson, Shop.class);
+            return shop;
+        }
+        //命中的是否是空值
+        if (shopJson != null) {
+            //返回错误信息
+            return null;
 
         }
         //4不存在，根据id查询数据库
@@ -56,14 +137,31 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             //将空值存入redis
             //返回错误信息
             stringRedisTemplate.opsForValue().set(key, "", RedisConstants.CACHE_NULL_TTL, TimeUnit.MINUTES);
-            return Result.fail("商户不存在");
+            return null;
         }
         //6存在写入redis
         stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(shop), RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
         //7返回结果
-        return Result.ok(shop);
+        return shop;
     }
 
+    /**
+     * 获取锁
+     * @param key
+     * @return
+     */
+    private boolean trLock(String key){
+        Boolean flag = stringRedisTemplate.opsForValue().setIfAbsent(key, "1", 10, TimeUnit.MINUTES);
+        return BooleanUtil.isTrue(flag);
+    }
+
+    /**
+     * 释放锁
+     * @param key 锁的key
+     */
+    private void unLock(String key){
+        stringRedisTemplate.delete(key);
+    }
     /**
      * 更新商品信息
      *
