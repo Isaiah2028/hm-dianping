@@ -8,6 +8,7 @@ import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisConstants;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -16,12 +17,13 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * <p>
- *  服务实现类
+ * 服务实现类
  * </p>
  *
  * @author 虎哥
  * @since 2021-12-22
  */
+@Slf4j
 @Service
 public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IShopService {
 
@@ -31,28 +33,40 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     @Override
     public Result queryById(Long id) {
         //1,从redis中获取商户信息
-        String key = RedisConstants.CACHE_SHOP_KEY +id;
-        stringRedisTemplate.opsForValue().get("cache:shop:" +id);
+        String key = RedisConstants.CACHE_SHOP_KEY + id;
+        stringRedisTemplate.opsForValue().get("cache:shop:" + id);
         String shopJson = stringRedisTemplate.opsForValue().get(key);
-        //判断是否存在
+        //2判断是否存在
         if (StrUtil.isNotBlank(shopJson)) {
-            //存在直接返回
+            //3存在直接返回
             Shop shop = JSONUtil.toBean(shopJson, Shop.class);
             return Result.ok(shop);
         }
-        //不存在，根据id查询数据库
+        //命中的是否是空值
+        if (shopJson != null) {
+            //返回错误信息
+            return Result.fail("店铺不存在！");
+
+        }
+        //4不存在，根据id查询数据库
         Shop shop = getById(id);
-        //不存在，返回错误
-        if (shop ==null){
+        log.info("查询数据库商户==============={} " + shop);
+        //5不存在，返回错误
+        if (shop == null) {
+            //将空值存入redis
+            //返回错误信息
+            stringRedisTemplate.opsForValue().set(key, "", RedisConstants.CACHE_NULL_TTL, TimeUnit.MINUTES);
             return Result.fail("商户不存在");
         }
-        //存在写入redis
-        stringRedisTemplate.opsForValue().set(key,JSONUtil.toJsonStr(shop),RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
+        //6存在写入redis
+        stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(shop), RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
+        //7返回结果
         return Result.ok(shop);
     }
 
     /**
      * 更新商品信息
+     *
      * @param shop
      * @return
      */
@@ -60,9 +74,9 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     public Result update(Shop shop) {
 
         Long id = shop.getId();
-        String key = RedisConstants.CACHE_SHOP_KEY +id;
+        String key = RedisConstants.CACHE_SHOP_KEY + id;
 
-        if (id ==null){
+        if (id == null) {
             return Result.fail("商铺id不能为空！");
         }
         //先修改数据库
