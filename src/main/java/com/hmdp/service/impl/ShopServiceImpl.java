@@ -9,6 +9,7 @@ import com.hmdp.entity.Shop;
 import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hmdp.utils.CacheClient;
 import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.RedisData;
 import lombok.extern.slf4j.Slf4j;
@@ -37,15 +38,21 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+    @Resource
+    CacheClient cacheClient;
 
     @Override
     public Result queryById(Long id) {
         //缓存穿透
         //Shop shop = queryWithPassthrough(id);
+        // Shop shop = cacheClient.queryWithPassThrough(RedisConstants.CACHE_SHOP_KEY,id,Shop.class,this::getById,RedisConstants.CACHE_SHOP_TTL,TimeUnit.MINUTES);
+
         //互斥锁解决缓存击穿
         //Shop shop = queryWithMutex(id);
+        Shop shop = cacheClient.queryWithLogicalExpire(RedisConstants.CACHE_SHOP_KEY, id, Shop.class, this::getById, RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
+
         //逻辑过期，key预热方式结解决
-        Shop shop = queryWithLogicalExpire(id);
+       // Shop shop = queryWithLogicalExpire(id);
         if (shop == null) {
             Result.fail("店铺不存在！");
         }
@@ -57,10 +64,11 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     private static final ExecutorService CACHE_REBUID_EXCUTOR = Executors.newFixedThreadPool(10);
 
     /**
+     * TODO 逻辑过期处理方法
      * @param id
      * @return
      */
-    public Shop queryWithLogicalExpire(Long id) {
+/*    public Shop queryWithLogicalExpire(Long id) {
         //1,从redis中获取商户信息
         String key = RedisConstants.CACHE_SHOP_KEY + id;
         stringRedisTemplate.opsForValue().get("cache:shop:" + id);
@@ -103,7 +111,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         //6.3失败，返回过期的店铺信息
         //8返回结果
         return shop;
-    }
+    }*/
 
     /**
      * 互斥锁解决缓存击穿
@@ -169,7 +177,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     }
 
     /**
-     * 穿透解决方案
+     * 穿透解决方案               
      *
      * @param id
      * @return shop
@@ -207,7 +215,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         return shop;
     }
 
-    /**
+     /**
      * 获取锁
      *
      * @param key
@@ -222,7 +230,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
      * 释放锁
      *
      * @param key 锁的key
-     */
+    */
     private void unLock(String key) {
         stringRedisTemplate.delete(key);
     }

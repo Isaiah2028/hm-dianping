@@ -20,7 +20,7 @@ import java.util.List;
 
 /**
  * <p>
- *  服务实现类
+ * 服务实现类
  * </p>
  *
  * @author 虎哥
@@ -37,7 +37,7 @@ public class ShopTypeServiceImpl extends ServiceImpl<ShopTypeMapper, ShopType> i
         //从redis查询列表，
         String key = RedisConstants.CACHE_SHOP_TYPE_KEY;
         String shopTypeJson = stringRedisTemplate.opsForValue().get(key);
-        if (StrUtil.isNotBlank(shopTypeJson)){
+        if (StrUtil.isNotBlank(shopTypeJson)) {
             //存在，直接返回
             JSONArray array = JSONUtil.parseArray(shopTypeJson);
             return Result.ok(array);
@@ -45,11 +45,11 @@ public class ShopTypeServiceImpl extends ServiceImpl<ShopTypeMapper, ShopType> i
         //不存在，查询数据库，并存入redis
         query().orderByAsc("sort").list();
         List<ShopType> shopTypes = query().orderByAsc("sort").list();
-        if (shopTypes== null) {
+        if (shopTypes == null) {
             return Result.fail("查询商户类型错误！");
         }
         //数据库存在，返回并存入redis
-        stringRedisTemplate.opsForValue().set(key,JSONUtil.toJsonStr(shopTypes));
+        stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(shopTypes));
         JSONArray jsonArray = JSONUtil.parseArray(shopTypes);
 
         return Result.ok(jsonArray);
