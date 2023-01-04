@@ -45,11 +45,11 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     public Result queryById(Long id) {
         //缓存穿透
         //Shop shop = queryWithPassthrough(id);
-        // Shop shop = cacheClient.queryWithPassThrough(RedisConstants.CACHE_SHOP_KEY,id,Shop.class,this::getById,RedisConstants.CACHE_SHOP_TTL,TimeUnit.MINUTES);
+         Shop shop = cacheClient.queryWithPassThrough(RedisConstants.CACHE_SHOP_KEY,id,Shop.class,this::getById,RedisConstants.CACHE_SHOP_TTL,TimeUnit.MINUTES);
 
         //互斥锁解决缓存击穿
         //Shop shop = queryWithMutex(id);
-        Shop shop = cacheClient.queryWithLogicalExpire(RedisConstants.CACHE_SHOP_KEY, id, Shop.class, this::getById, RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
+        //Shop shop = cacheClient.queryWithLogicalExpire(RedisConstants.CACHE_SHOP_KEY, id, Shop.class, this::getById, RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
 
         //逻辑过期，key预热方式结解决
        // Shop shop = queryWithLogicalExpire(id);
@@ -112,6 +112,11 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         //8返回结果
         return shop;
     }*/
+
+
+
+
+
 
     /**
      * 互斥锁解决缓存击穿
@@ -185,7 +190,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     public Shop queryWithPassthrough(Long id) {
         //1,从redis中获取商户信息
         String key = RedisConstants.CACHE_SHOP_KEY + id;
-        stringRedisTemplate.opsForValue().get("cache:shop:" + id);
+        //stringRedisTemplate.opsForValue().get("cache:shop:" + id);
         String shopJson = stringRedisTemplate.opsForValue().get(key);
         //2判断是否存在
         if (StrUtil.isNotBlank(shopJson)) {

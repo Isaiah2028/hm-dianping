@@ -36,5 +36,4 @@ public class MVCconfig  implements WebMvcConfigurer {
         //拦截所有
         registry.addInterceptor(new RereshTokenInterceptor(stringRedisTemplate)).addPathPatterns("/**").order(0);
     }
-
 }
